@@ -4,6 +4,9 @@ Obsidian Web Clipper helps you highlight and capture the web in your favorite br
 - **[Documentation](https://help.obsidian.md/web-clipper)**
 - **[Troubleshooting](https://help.obsidian.md/web-clipper/troubleshoot)**
 
+## 二次开发说明
+在现有浏览器插件功能基础上，参考[我之前创建的all-in-obs仓库](https://github.com/hztBUAA/all-in-obs)增加了对微信公众号文章、小红书帖子的增强识别。后续会在这个浏览器插件的基础上增加小红书优质评论、图片ocr文字自动转写等功能。
+
 ## Get started
 
 Install the extension by downloading it from the official directory for your browser:
