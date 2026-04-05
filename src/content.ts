@@ -157,7 +157,7 @@ declare global {
 	// Firefox
 	browser.runtime.sendMessage({ action: "contentScriptLoaded" });
 
-	interface ContentResponse {
+interface ContentResponse {
 		content: string;
 		selectedHtml: string;
 		extractedContent: { [key: string]: string };
@@ -176,6 +176,41 @@ declare global {
 		wordCount: number;
 		language: string;
 		metaTags: { name?: string | null; property?: string | null; content: string | null }[];
+	}
+
+	function parseImageListVariable(raw: string | undefined): string[] {
+		if (!raw) {
+			return [];
+		}
+		try {
+			const parsed = JSON.parse(raw);
+			if (!Array.isArray(parsed)) {
+				return [];
+			}
+			return parsed.filter((item: unknown): item is string => typeof item === 'string' && item.trim().length > 0);
+		} catch (_error) {
+			return [];
+		}
+	}
+
+	function ensureContentHasImages(contentHtml: string, imageUrls: string[]): string {
+		if (!contentHtml || /<img\b/i.test(contentHtml) || imageUrls.length === 0) {
+			return contentHtml;
+		}
+		const imageBlocks = imageUrls.map(url => `<p><img src="${url.replace(/"/g, '&quot;')}" alt="image" /></p>`).join('\n');
+		return `${contentHtml}\n${imageBlocks}`;
+	}
+
+	function ensureContentHasVideoLink(contentHtml: string, videoUrl: string): string {
+		const normalized = (videoUrl || '').trim();
+		if (!normalized) {
+			return contentHtml;
+		}
+		if (contentHtml.includes(normalized) || /<video\b/i.test(contentHtml)) {
+			return contentHtml;
+		}
+		const safeUrl = normalized.replace(/"/g, '&quot;');
+		return `${contentHtml}\n<p><a href="${safeUrl}">${safeUrl}</a></p>`;
 	}
 
 	browser.runtime.onMessage.addListener((request: any, sender, sendResponse) => {
@@ -326,6 +361,16 @@ declare global {
 							enhancedSite = platformData.site;
 						}
 						Object.assign(extractedContent, platformData.variables);
+
+						if (platformData.platform === 'wechat') {
+							const wechatImages = parseImageListVariable(platformData.variables.wechat_images);
+							enhancedContent = ensureContentHasImages(enhancedContent, wechatImages);
+						}
+						if (platformData.platform === 'xiaohongshu') {
+							const xhsImages = parseImageListVariable(platformData.variables.xhs_images);
+							enhancedContent = ensureContentHasImages(enhancedContent, xhsImages);
+							enhancedContent = ensureContentHasVideoLink(enhancedContent, platformData.variables.xhs_video_url || '');
+						}
 					}
 				} catch (platformError) {
 					console.warn('[Obsidian Clipper] Platform extraction fallback to defuddle:', platformError);

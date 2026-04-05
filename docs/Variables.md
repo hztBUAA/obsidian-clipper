@@ -45,6 +45,7 @@ For some platforms, Web Clipper adds extra preset variables when platform-specif
 Common:
 
 - `{{platform}}` (`wechat` or `xiaohongshu`)
+- `{{platform_extractor_mode}}` (for debugging extraction path)
 - `{{platform_warning}}`
 - `{{platform_error}}`
 
@@ -64,6 +65,9 @@ Xiaohongshu:
 
 - `{{xhs_source_url}}`
 - `{{xhs_type}}`
+- `{{xhs_author}}`
+- `{{xhs_published_at}}`
+- `{{xhs_published_ts}}`
 - `{{xhs_is_video}}`
 - `{{xhs_video_url}}`
 - `{{xhs_tags}}` (JSON array)

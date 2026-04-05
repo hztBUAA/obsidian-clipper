@@ -21,6 +21,10 @@ interface XhsNoteData {
 	isVideo: boolean;
 	tags: string[];
 	cover: string;
+	author: string;
+	publishedAt: string;
+	publishedTs: number;
+	source: 'state' | 'fallback';
 }
 
 export interface PlatformExtractionResult {
@@ -51,10 +55,16 @@ export function extractPlatformData(url: string, html: string): PlatformExtracti
 
 function extractWechatData(_url: string, html: string): PlatformExtractionResult {
 	if (isWechatVerificationPage(html)) {
+		const verificationMessage = 'WeChat verification page detected. Open the article directly after verification and retry clipping.';
 		return {
 			platform: 'wechat',
+			title: extractTitleTag(html) || 'WeChat Verification Required',
+			description: verificationMessage,
+			contentHtml: `<p>${escapeHtml(verificationMessage)}</p>`,
+			site: 'WeChat',
 			variables: {
 				platform: 'wechat',
+				platform_extractor_mode: 'wechat_verification',
 				platform_error: 'WeChat verification page detected',
 			},
 		};
@@ -64,6 +74,7 @@ function extractWechatData(_url: string, html: string): PlatformExtractionResult
 	const contentHtml = article.contentHtml || '';
 	const variables: Record<string, string> = {
 		platform: 'wechat',
+		platform_extractor_mode: 'wechat_article',
 		wechat_account: article.account,
 		wechat_id: article.wechatId,
 		wechat_alias: article.alias,
@@ -89,43 +100,66 @@ function extractWechatData(_url: string, html: string): PlatformExtractionResult
 }
 
 function extractXhsData(url: string, html: string): PlatformExtractionResult {
+	const resolvedUrl = resolveXhsUrlFromPage(url, html);
 	if (isXhsUnavailablePage(html)) {
+		const unavailableMessage = 'Xiaohongshu page unavailable. Open the final note URL and retry clipping.';
+		const title = extractXhsTitle(html) || 'Xiaohongshu Page Unavailable';
+		const linkPart = resolvedUrl ? `<p><a href="${escapeHtml(resolvedUrl)}">${escapeHtml(resolvedUrl)}</a></p>` : '';
 		return {
 			platform: 'xiaohongshu',
+			title,
+			description: unavailableMessage,
+			contentHtml: `<p>${escapeHtml(unavailableMessage)}</p>${linkPart}`,
+			site: 'Xiaohongshu',
 			variables: {
 				platform: 'xiaohongshu',
+				platform_extractor_mode: 'xhs_unavailable',
+				xhs_source_url: resolvedUrl,
 				platform_error: 'Xiaohongshu page unavailable',
+				platform_warning: 'Open the final note URL for full extraction.',
 			},
 		};
 	}
 
-	const resolvedUrl = resolveXhsUrlFromPage(url, html);
 	const note = extractXhsNoteData(html);
-	const contentHtml = buildXhsContentHtml(note);
-	const warning = /xhslink\.com/i.test(url)
-		? 'Short-link page detected, open the final note URL for full extraction.'
-		: '';
+	let contentHtml = buildXhsContentHtml(note);
+	if (!contentHtml && note.title) {
+		contentHtml = `<p>${escapeHtml(note.title)}</p>`;
+	}
+	const warningParts: string[] = [];
+	if (/xhslink\.com/i.test(url)) {
+		warningParts.push('Short-link page detected, open the final note URL for full extraction.');
+	}
+	if (note.source === 'fallback') {
+		warningParts.push('Structured note data missing, fallback extraction was used.');
+	}
 
 	const variables: Record<string, string> = {
 		platform: 'xiaohongshu',
+		platform_extractor_mode: note.source === 'state' ? 'xhs_state' : 'xhs_fallback',
 		xhs_source_url: resolvedUrl,
 		xhs_type: note.isVideo ? 'video' : 'note',
+		xhs_author: note.author,
+		xhs_published_at: note.publishedAt,
+		xhs_published_ts: String(note.publishedTs || 0),
 		xhs_is_video: String(note.isVideo),
 		xhs_video_url: note.videoUrl || '',
 		xhs_tags: JSON.stringify(note.tags),
 		xhs_images: JSON.stringify(note.images),
 		xhs_cover: note.cover,
 	};
-	if (warning) {
-		variables.platform_warning = warning;
+	if (warningParts.length > 0) {
+		variables.platform_warning = warningParts.join(' ');
 	}
 
 	return {
 		platform: 'xiaohongshu',
 		contentHtml: contentHtml || undefined,
 		title: note.title || undefined,
+		author: note.author || undefined,
 		description: note.content || undefined,
 		image: note.cover || undefined,
+		published: note.publishedAt || undefined,
 		site: 'Xiaohongshu',
 		variables,
 	};
@@ -136,7 +170,11 @@ function isWechatVerificationPage(html: string): boolean {
 }
 
 function isXhsUnavailablePage(html: string): boolean {
-	return /<title>\s*小红书\s*-\s*你访问的页面不见了\s*<\/title>/i.test(html);
+	const title = extractXhsTitle(html);
+	const titleIndicatesUnavailable = /你访问的页面不见了|页面不存在|note not found|页面异常|无法查看/i.test(title);
+	const htmlIndicatesUnavailable = /error_code=\d+|当前笔记暂时无法浏览|你访问的页面不见了/i.test(html);
+	const hasNoteStructure = /noteDetailMap|id=["']detail-desc["']|id=["']noteContainer["']/i.test(html);
+	return (titleIndicatesUnavailable || htmlIndicatesUnavailable) && !hasNoteStructure;
 }
 
 function extractWechatArticle(html: string): WechatArticleData {
@@ -289,8 +327,9 @@ function extractNumericType(text: string): string {
 
 function extractMetaContent(html: string, attrName: string, attrValue: string): string {
 	const escaped = escapeRegex(attrValue);
-	const regex = new RegExp(`<meta\\s+${attrName}=["']${escaped}["']\\s+content=["']([^"']*)["']`, 'i');
-	return decodeHtmlEntities(regex.exec(html)?.[1] ?? '');
+	const regexA = new RegExp(`<meta\\b[^>]*\\b${attrName}=["']${escaped}["'][^>]*\\bcontent=["']([^"']*)["'][^>]*>`, 'i');
+	const regexB = new RegExp(`<meta\\b[^>]*\\bcontent=["']([^"']*)["'][^>]*\\b${attrName}=["']${escaped}["'][^>]*>`, 'i');
+	return decodeHtmlEntities(regexA.exec(html)?.[1] ?? regexB.exec(html)?.[1] ?? '');
 }
 
 function extractTitleTag(html: string): string {
@@ -307,6 +346,10 @@ function extractContentNoEncode(segment: string): string {
 }
 
 function extractContentHtmlFromJsContent(html: string): string {
+	const htmlByStructure = extractDivInnerHtmlById(html, 'js_content');
+	if (htmlByStructure) {
+		return htmlByStructure;
+	}
 	const match = html.match(/<div[^>]*id=["']js_content["'][^>]*>([\s\S]*?)<\/div>/i);
 	return match?.[1] ?? '';
 }
@@ -321,7 +364,81 @@ function cleanWechatContentHtml(contentHtml: string): string {
 	cleaned = cleaned.replace(/<noscript[\s\S]*?<\/noscript>/gi, '');
 	cleaned = cleaned.replace(/<iframe[\s\S]*?<\/iframe>/gi, '');
 	cleaned = cleaned.replace(/<mp-style-type[\s\S]*?<\/mp-style-type>/gi, '');
+	cleaned = normalizeWechatImageElements(cleaned);
 	return cleaned;
+}
+
+function extractDivInnerHtmlById(html: string, elementId: string): string {
+	const escapedId = escapeRegex(elementId);
+	const openTagRegex = new RegExp(`<div\\b[^>]*\\bid=["']${escapedId}["'][^>]*>`, 'i');
+	const openMatch = openTagRegex.exec(html);
+	if (!openMatch || openMatch.index < 0) {
+		return '';
+	}
+	const contentStart = openMatch.index + openMatch[0].length;
+	const tail = html.slice(contentStart);
+	const tagRegex = /<\/?div\b[^>]*>/gi;
+	let depth = 1;
+	let match = tagRegex.exec(tail);
+	while (match) {
+		const tag = match[0];
+		const isClose = /^<\s*\//.test(tag);
+		const isSelfClosing = /\/\s*>$/.test(tag);
+		if (isClose) {
+			depth -= 1;
+			if (depth === 0) {
+				return tail.slice(0, match.index);
+			}
+		} else if (!isSelfClosing) {
+			depth += 1;
+		}
+		match = tagRegex.exec(tail);
+	}
+	return '';
+}
+
+function normalizeWechatImageElements(contentHtml: string): string {
+	return contentHtml.replace(/<img\b[^>]*>/gi, (imgTag) => {
+		const attrs = parseHtmlAttributes(imgTag);
+		const bestSrc =
+			attrs['data-src'] ||
+			attrs['data-original'] ||
+			attrs['data-actualsrc'] ||
+			attrs.src ||
+			'';
+		const normalizedSrc = normalizeMediaUrl(bestSrc);
+		if (normalizedSrc) {
+			attrs.src = normalizedSrc;
+		}
+		delete attrs['data-src'];
+		delete attrs['data-original'];
+		delete attrs['data-actualsrc'];
+		return buildImgTag(attrs);
+	});
+}
+
+function parseHtmlAttributes(tag: string): Record<string, string> {
+	const attrs: Record<string, string> = {};
+	const attrRegex = /([^\s"'<>\/=]+)\s*=\s*("([^"]*)"|'([^']*)')/g;
+	let match = attrRegex.exec(tag);
+	while (match) {
+		const key = match[1].toLowerCase();
+		const value = match[3] ?? match[4] ?? '';
+		attrs[key] = decodeHtmlEntities(value);
+		match = attrRegex.exec(tag);
+	}
+	return attrs;
+}
+
+function buildImgTag(attrs: Record<string, string>): string {
+	const pieces: string[] = [];
+	for (const [key, value] of Object.entries(attrs)) {
+		if (value === '') {
+			continue;
+		}
+		pieces.push(`${key}="${escapeHtmlAttribute(value)}"`);
+	}
+	return pieces.length > 0 ? `<img ${pieces.join(' ')} />` : '<img />';
 }
 
 function extractImageUrls(contentHtml: string, coverUrl: string): string[] {
@@ -409,25 +526,119 @@ function extractXhsUrlFromHtml(html: string): string | null {
 		}
 	}
 
-	for (const match of html.matchAll(/https?:\/\/www\.xiaohongshu\.com\/(?:discovery\/item|explore)\/[a-zA-Z0-9]+(?:\?[^"'<>\\s]*)?/gi)) {
+	for (const match of html.matchAll(/https?:\/\/www\.xiaohongshu\.com\/(?:discovery\/item|explore)\/[a-zA-Z0-9]+(?:\?[^"'<>\s]*)?/gi)) {
 		addCandidate(match[0]);
 	}
 
 	const withToken = candidates.find(candidate => /[?&]xsec_token=/i.test(candidate));
-	return withToken || candidates[0] || null;
+	if (withToken) {
+		return withToken;
+	}
+
+	const fallbackNoteId = extractXhsNoteIdFromUrl(candidates[0] || '');
+	const tokenizedFromState = buildTokenizedXhsUrlFromState(html, fallbackNoteId);
+	if (tokenizedFromState) {
+		return tokenizedFromState;
+	}
+
+	return candidates[0] || null;
+}
+
+function buildTokenizedXhsUrlFromState(html: string, noteIdHint = ''): string | null {
+	const state = parseXhsState(html);
+	if (state) {
+		try {
+			const map = state?.note?.noteDetailMap;
+			if (map && typeof map === 'object') {
+				const noteIdFromMap = Object.keys(map)[0] || '';
+				const note = map[noteIdFromMap]?.note;
+				const noteId = (typeof note?.noteId === 'string' && note.noteId) || noteIdFromMap;
+				if (noteId) {
+					const xsecToken = typeof note?.xsecToken === 'string' ? note.xsecToken.trim() : '';
+					if (xsecToken) {
+						const query = new URLSearchParams({
+							xsec_token: xsecToken,
+							xsec_source: 'pc_feed',
+							source: 'web_explore_feed',
+						});
+						return normalizeXhsUrl(`https://www.xiaohongshu.com/discovery/item/${noteId}?${query.toString()}`);
+					}
+					return normalizeXhsUrl(`https://www.xiaohongshu.com/discovery/item/${noteId}`);
+				}
+			}
+		} catch (_error) {
+			// fallback below
+		}
+	}
+
+	const noteId = noteIdHint || extractXhsNoteIdFromUrl(html);
+	if (!noteId) {
+		return null;
+	}
+
+	const xsecToken = extractXhsTokenFromHtmlByNoteId(html, noteId);
+	if (!xsecToken) {
+		return null;
+	}
+
+	const query = new URLSearchParams({
+		xsec_token: xsecToken,
+		xsec_source: 'pc_feed',
+		source: 'web_explore_feed',
+	});
+	return normalizeXhsUrl(`https://www.xiaohongshu.com/discovery/item/${noteId}?${query.toString()}`);
+}
+
+function extractXhsNoteIdFromUrl(input: string): string {
+	if (!input) {
+		return '';
+	}
+	const match = input.match(/\/(?:discovery\/item|explore)\/([a-zA-Z0-9]+)/i);
+	return match?.[1] || '';
+}
+
+function extractXhsTokenFromHtmlByNoteId(html: string, noteId: string): string {
+	if (!html || !noteId) {
+		return '';
+	}
+
+	const escapedNoteId = noteId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+	const mapPattern = new RegExp(
+		`"noteDetailMap"\\s*:\\s*\\{\\s*"${escapedNoteId}"\\s*:\\s*\\{[\\s\\S]*?"xsecToken"\\s*:\\s*"([^"]+)"`,
+		'i'
+	);
+	const mapMatch = html.match(mapPattern);
+	if (mapMatch?.[1]) {
+		return decodeJsEscapedString(decodeHtmlEntities(mapMatch[1])).trim();
+	}
+
+	const anyTokenMatch = html.match(/"xsecToken"\s*:\s*"([^"]+)"/i);
+	if (anyTokenMatch?.[1]) {
+		return decodeJsEscapedString(decodeHtmlEntities(anyTokenMatch[1])).trim();
+	}
+
+	return '';
 }
 
 function extractXhsNoteData(html: string): XhsNoteData {
-	const title = (html.match(/<title>(.*?)<\/title>/)?.[1] || '').replace(' - 小红书', '').trim();
+	const title = extractXhsTitle(html);
 	const state = parseXhsState(html);
-	const note = state ? getXhsNoteObject(state) : null;
+	const noteFromState = state ? getXhsNoteObject(state) : null;
+	const note = noteFromState || extractLooseXhsNoteObject(html);
+	const source: 'state' | 'fallback' = note ? 'state' : 'fallback';
 
-	const images = extractXhsImages(note);
-	const videoUrl = extractXhsVideoUrl(note);
+	const images = extractXhsImages(note, html);
+	const videoUrl = extractXhsVideoUrl(note, html);
 	const isVideo = note?.type === 'video';
-	const contentFromHtml = html.match(/<div id="detail-desc" class="desc">([\s\S]*?)<\/div>/)?.[1] || '';
-	const content = extractXhsContent(note, contentFromHtml);
+	const author = extractXhsAuthor(note, html);
+	const publishedTs = extractXhsPublishedTs(note);
+	const publishedFromDom = extractXhsPublishedFromDom(html);
+	const publishedAt = publishedTs > 0 ? formatUnixTime(publishedTs) : publishedFromDom;
+	const contentFromHtml = extractXhsDetailDescription(html);
+	const metaDescription = extractMetaContent(html, 'name', 'description');
+	const content = extractXhsContent(note, contentFromHtml, metaDescription);
 	const tags = extractXhsTags(content);
+	const cover = images[0] || extractMetaContent(html, 'property', 'og:image') || '';
 
 	return {
 		title: title || 'Untitled Xiaohongshu Note',
@@ -436,17 +647,132 @@ function extractXhsNoteData(html: string): XhsNoteData {
 		videoUrl,
 		isVideo,
 		tags,
-		cover: images[0] || '',
+		cover: normalizeMediaUrl(cover),
+		author,
+		publishedAt,
+		publishedTs,
+		source,
 	};
 }
 
 function parseXhsState(html: string): any | null {
-	const stateMatch = html.match(/window\.__INITIAL_STATE__\s*=\s*([\s\S]*?)<\/script>/i);
-	if (!stateMatch?.[1]) {
-		return null;
+	const candidates = extractXhsStateCandidates(html);
+	let firstParsed: any | null = null;
+	for (const candidate of candidates) {
+		const parsed = parseLooseJson(candidate);
+		if (!parsed || typeof parsed !== 'object') {
+			continue;
+		}
+		if (!firstParsed) {
+			firstParsed = parsed;
+		}
+		if (parsed?.note?.noteDetailMap && typeof parsed.note.noteDetailMap === 'object') {
+			return parsed;
+		}
 	}
+	return firstParsed;
+}
+
+function extractXhsStateCandidates(html: string): string[] {
+	const candidates: string[] = [];
+	const addCandidate = (value: string) => {
+		const normalized = value.trim();
+		if (!normalized || candidates.includes(normalized)) {
+			return;
+		}
+		candidates.push(normalized);
+	};
+
+	const assignment = 'window.__INITIAL_STATE__';
+	let cursor = 0;
+	while (cursor < html.length) {
+		const index = html.indexOf(assignment, cursor);
+		if (index < 0) {
+			break;
+		}
+		const equalIndex = html.indexOf('=', index + assignment.length);
+		if (equalIndex < 0) {
+			cursor = index + assignment.length;
+			continue;
+		}
+		const objectStart = html.indexOf('{', equalIndex + 1);
+		if (objectStart >= 0) {
+			const objectLiteral = extractBalancedObjectLiteral(html, objectStart);
+			if (objectLiteral) {
+				addCandidate(objectLiteral);
+			}
+		}
+
+		const parseStart = html.indexOf('JSON.parse', equalIndex + 1);
+		if (parseStart >= 0 && parseStart - equalIndex < 120) {
+			const literal = extractJsonParseStringFrom(html, parseStart);
+			if (literal) {
+				addCandidate(decodeJsEscapedString(literal));
+			}
+		}
+		cursor = index + assignment.length;
+	}
+
+	for (const match of html.matchAll(/window\.__INITIAL_STATE__\s*=\s*([\s\S]*?)<\/script>/gi)) {
+		addCandidate(match[1] || '');
+	}
+
+	return candidates;
+}
+
+function extractBalancedObjectLiteral(text: string, start: number): string {
+	if (start < 0 || text[start] !== '{') {
+		return '';
+	}
+	let depth = 0;
+	let inString = false;
+	let quote = '';
+	let escapeNext = false;
+	for (let i = start; i < text.length; i += 1) {
+		const ch = text[i];
+		if (escapeNext) {
+			escapeNext = false;
+			continue;
+		}
+		if (inString) {
+			if (ch === '\\') {
+				escapeNext = true;
+				continue;
+			}
+			if (ch === quote) {
+				inString = false;
+				quote = '';
+			}
+			continue;
+		}
+		if (ch === '"' || ch === "'") {
+			inString = true;
+			quote = ch;
+			continue;
+		}
+		if (ch === '{') {
+			depth += 1;
+			continue;
+		}
+		if (ch === '}') {
+			depth -= 1;
+			if (depth === 0) {
+				return text.slice(start, i + 1);
+			}
+		}
+	}
+	return '';
+}
+
+function extractJsonParseStringFrom(text: string, from: number): string {
+	const segment = text.slice(from, from + 300000);
+	const match = segment.match(/JSON\.parse\(\s*(['"])([\s\S]*?)\1\s*\)/);
+	return match?.[2] || '';
+}
+
+function parseLooseJson(raw: string): any | null {
 	try {
-		let jsonStr = stateMatch[1].trim().replace(/;\s*$/, '');
+		let jsonStr = raw.trim().replace(/;\s*$/, '');
 		const lastBrace = jsonStr.lastIndexOf('}');
 		if (lastBrace >= 0) {
 			jsonStr = jsonStr.slice(0, lastBrace + 1);
@@ -463,31 +789,198 @@ function getXhsNoteObject(state: any): any | null {
 		if (!map || typeof map !== 'object') {
 			return null;
 		}
-		const noteId = Object.keys(map)[0];
-		return map[noteId]?.note ?? null;
+		let firstCandidate: any | null = null;
+		for (const mapValue of Object.values(map)) {
+			const note = (mapValue as any)?.note || (mapValue as any)?.noteCard || null;
+			if (!note || typeof note !== 'object') {
+				continue;
+			}
+			if (!firstCandidate) {
+				firstCandidate = note;
+			}
+			if (hasXhsNotePayload(note)) {
+				return note;
+			}
+		}
+		return firstCandidate;
 	} catch (_error) {
 		return null;
 	}
 }
 
-function extractXhsImages(note: any): string[] {
-	const list = Array.isArray(note?.imageList) ? note.imageList : [];
-	return list.map((img: any) => normalizeMediaUrl(img?.urlDefault || '')).filter((url: string) => !!url);
+function hasXhsNotePayload(note: any): boolean {
+	if (!note || typeof note !== 'object') {
+		return false;
+	}
+	if (Array.isArray(note.imageList) && note.imageList.length > 0) {
+		return true;
+	}
+	if (typeof note.desc === 'string' && note.desc.trim()) {
+		return true;
+	}
+	if (Array.isArray(note.desc) && note.desc.some((item: unknown) => typeof item === 'string' && item.trim())) {
+		return true;
+	}
+	if (note.video?.media?.stream) {
+		return true;
+	}
+	if (typeof note.title === 'string' && note.title.trim()) {
+		return true;
+	}
+	return false;
 }
 
-function extractXhsVideoUrl(note: any): string | null {
+function extractLooseXhsNoteObject(html: string): any | null {
+	let firstCandidate: any | null = null;
+	const pattern = /"note"\s*:\s*\{/g;
+	let match = pattern.exec(html);
+	let scanned = 0;
+	while (match && scanned < 80) {
+		scanned += 1;
+		const braceStart = match.index + match[0].lastIndexOf('{');
+		const objectLiteral = extractBalancedObjectLiteral(html, braceStart);
+		if (!objectLiteral) {
+			match = pattern.exec(html);
+			continue;
+		}
+		const parsed = parseLooseJson(objectLiteral);
+		if (parsed && typeof parsed === 'object') {
+			if (!firstCandidate) {
+				firstCandidate = parsed;
+			}
+			if (hasXhsNotePayload(parsed)) {
+				return parsed;
+			}
+		}
+		match = pattern.exec(html);
+	}
+	return firstCandidate;
+}
+
+function extractXhsImages(note: any, html: string): string[] {
+	const urls = new Set<string>();
+	const list = Array.isArray(note?.imageList) ? note.imageList : [];
+	const hasStructuredImages = list.length > 0;
+	for (const img of list) {
+		const normalized = normalizeMediaUrl(img?.urlDefault || '');
+		if (normalized) {
+			urls.add(normalized);
+		}
+	}
+	if (!hasStructuredImages) {
+		for (const match of html.matchAll(/https?:\/\/(?:ci|sns-webpic)\.xiaohongshu\.com\/[^\s"'<>\\]+/gi)) {
+			const normalized = normalizeMediaUrl(match[0]);
+			if (normalized) {
+				urls.add(normalized);
+			}
+		}
+		for (const match of html.matchAll(/https?:\/\/(?:sns-webpic|ci)[^"'<>\s]*\.(?:xiaohongshu\.com|xhscdn\.com)\/[^\s"'<>\\]+/gi)) {
+			const normalized = normalizeMediaUrl(match[0]);
+			if (normalized) {
+				urls.add(normalized);
+			}
+		}
+		for (const match of html.matchAll(/background-image\s*:\s*url\((https?:\/\/[^)]+)\)/gi)) {
+			const normalized = normalizeMediaUrl(match[1]);
+			if (normalized) {
+				urls.add(normalized);
+			}
+		}
+		for (const match of html.matchAll(/https?:\\u002F\\u002F(?:sns-webpic|ci)[^"'<>\s]*\.(?:xiaohongshu\.com|xhscdn\.com)\\u002F[^\s"'<>\\]+/gi)) {
+			const normalized = normalizeMediaUrl(match[0].replace(/\\u002F/gi, '/'));
+			if (normalized) {
+				urls.add(normalized);
+			}
+		}
+	}
+	if (!hasStructuredImages) {
+		const ogImage = normalizeMediaUrl(extractMetaContent(html, 'property', 'og:image'));
+		if (ogImage) {
+			urls.add(ogImage);
+		}
+	}
+	return Array.from(urls).slice(0, 30);
+}
+
+function extractXhsVideoUrl(note: any, html: string): string | null {
 	const stream = note?.video?.media?.stream;
 	const h264 = Array.isArray(stream?.h264) ? stream.h264 : [];
 	const h265 = Array.isArray(stream?.h265) ? stream.h265 : [];
 	const picked = h264[0]?.masterUrl || h265[0]?.masterUrl || '';
 	const normalized = normalizeMediaUrl(picked);
-	return normalized || null;
+	if (normalized) {
+		return normalized;
+	}
+	const ogVideo = normalizeMediaUrl(extractMetaContent(html, 'property', 'og:video'));
+	if (ogVideo) {
+		return ogVideo;
+	}
+	const inline = html.match(/https?:\/\/[^"'<>\s]*xhs[^"'<>\s]*\.mp4(?:\?[^"'<>\s]*)?/i)?.[0] || '';
+	const normalizedInline = normalizeMediaUrl(inline);
+	if (normalizedInline) {
+		return normalizedInline;
+	}
+	const escapedInline = html.match(/https?:\\u002F\\u002F[^"'<>\s]*\.mp4(?:\\u003F[^"'<>\s]*)?/i)?.[0] || '';
+	if (escapedInline) {
+		return normalizeMediaUrl(escapedInline.replace(/\\u002F/gi, '/').replace(/\\u003F/gi, '?').replace(/\\u0026/gi, '&')) || null;
+	}
+	return null;
 }
 
-function extractXhsContent(note: any, contentFromHtml: string): string {
+function extractXhsContent(note: any, contentFromHtml: string, metaDescription: string): string {
 	const htmlText = contentFromHtml.replace(/<[^>]+>/g, '').replace(/\[话题\]/g, '').replace(/\[[^\]]+\]/g, '').trim();
 	const desc = Array.isArray(note?.desc) ? note.desc.join('\n') : note?.desc || '';
-	return decodeJsEscapedString(String(desc)).replace(/\r/g, '').trim() || htmlText;
+	const decoded = decodeJsEscapedString(String(desc)).replace(/\r/g, '').trim();
+	return decoded || htmlText || normalizeWhitespace(metaDescription);
+}
+
+function extractXhsAuthor(note: any, html: string): string {
+	const author = pickFirst([
+		normalizeWhitespace(decodeJsEscapedString(String(note?.user?.nickname || ''))),
+		normalizeWhitespace(decodeJsEscapedString(String(note?.author || ''))),
+		normalizeWhitespace(decodeJsEscapedString(String(note?.nickname || ''))),
+		extractXhsAuthorFromHtml(html),
+		extractMetaContent(html, 'name', 'author'),
+	]);
+	return normalizeWhitespace(author);
+}
+
+function extractXhsAuthorFromHtml(html: string): string {
+	const text = extractInnerTextByRegex(html, /<span[^>]*class=["'][^"']*\busername\b[^"']*["'][^>]*>([\s\S]*?)<\/span>/i);
+	return normalizeWhitespace(text);
+}
+
+function extractXhsPublishedTs(note: any): number {
+	return pickNumber([
+		toUnixSeconds(note?.time),
+		toUnixSeconds(note?.lastUpdateTime),
+		toUnixSeconds(note?.publishTime),
+		toUnixSeconds(note?.publishTimestamp),
+	]);
+}
+
+function extractXhsPublishedFromDom(html: string): string {
+	const text = extractInnerTextByRegex(html, /<span[^>]*class=["'][^"']*\bdate\b[^"']*["'][^>]*>([\s\S]*?)<\/span>/i);
+	return normalizeWhitespace(text);
+}
+
+function extractInnerTextByRegex(html: string, pattern: RegExp): string {
+	const raw = pattern.exec(html)?.[1] || '';
+	if (!raw) {
+		return '';
+	}
+	return decodeHtmlEntities(raw).replace(/<[^>]+>/g, '').trim();
+}
+
+function extractXhsTitle(html: string): string {
+	const ogTitle = extractMetaContent(html, 'property', 'og:title');
+	const title = (html.match(/<title>(.*?)<\/title>/)?.[1] || '').replace(' - 小红书', '').trim();
+	return normalizeWhitespace(ogTitle || title);
+}
+
+function extractXhsDetailDescription(html: string): string {
+	const match = html.match(/<div[^>]*id=["']detail-desc["'][^>]*>([\s\S]*?)<\/div>/i);
+	return match?.[1] || '';
 }
 
 function extractXhsTags(content: string): string[] {
@@ -571,6 +1064,7 @@ function normalizeMediaUrl(url: string): string {
 		return '';
 	}
 	let normalized = decodeHtmlEntities(decodeJsEscapedString(url.trim()));
+	normalized = normalized.replace(/\\u002F/gi, '/').replace(/\\u003A/gi, ':').replace(/\\u003F/gi, '?').replace(/\\\//g, '/');
 	normalized = normalized.replace(/\\x26amp;/gi, '&').replace(/&amp;/gi, '&');
 	normalized = normalized.replace(/\u0026/gi, '&');
 	normalized = normalized.replace(/^\/\//, 'https://');
@@ -624,8 +1118,27 @@ function toNumber(value: string): number {
 	return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function toUnixSeconds(value: unknown): number {
+	const numeric = typeof value === 'number' ? value : Number(String(value || ''));
+	if (!Number.isFinite(numeric) || numeric <= 0) {
+		return 0;
+	}
+	if (numeric >= 1e12) {
+		return Math.floor(numeric / 1000);
+	}
+	return Math.floor(numeric);
+}
+
 function escapeRegex(value: string): string {
 	return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function escapeHtmlAttribute(value: string): string {
+	return value
+		.replace(/&/g, '&amp;')
+		.replace(/"/g, '&quot;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;');
 }
 
 function escapeHtml(value: string): string {
