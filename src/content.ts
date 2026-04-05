@@ -8,6 +8,7 @@ import { createMarkdownContent } from 'defuddle/full';
 import { flattenShadowDom } from './utils/flatten-shadow-dom';
 import { saveFile } from './utils/file-utils';
 import { debugLog } from './utils/debug';
+import { extractPlatformData } from './utils/platform-extractors';
 
 declare global {
 	interface Window {
@@ -292,6 +293,43 @@ declare global {
 				const extractedContent: { [key: string]: string } = {
 					...defuddled.variables,
 				};
+				let enhancedContent = defuddled.content;
+				let enhancedTitle = defuddled.title;
+				let enhancedDescription = defuddled.description;
+				let enhancedAuthor = defuddled.author;
+				let enhancedImage = defuddled.image;
+				let enhancedPublished = defuddled.published;
+				let enhancedSite = defuddled.site;
+
+				try {
+					const platformData = extractPlatformData(document.URL, document.documentElement.outerHTML);
+					if (platformData) {
+						if (platformData.contentHtml) {
+							enhancedContent = platformData.contentHtml;
+						}
+						if (platformData.title) {
+							enhancedTitle = platformData.title;
+						}
+						if (platformData.description) {
+							enhancedDescription = platformData.description;
+						}
+						if (platformData.author) {
+							enhancedAuthor = platformData.author;
+						}
+						if (platformData.image) {
+							enhancedImage = platformData.image;
+						}
+						if (platformData.published) {
+							enhancedPublished = platformData.published;
+						}
+						if (platformData.site) {
+							enhancedSite = platformData.site;
+						}
+						Object.assign(extractedContent, platformData.variables);
+					}
+				} catch (platformError) {
+					console.warn('[Obsidian Clipper] Platform extraction fallback to defuddle:', platformError);
+				}
 
 				// Create a new DOMParser
 				const parser = new DOMParser();
@@ -336,22 +374,22 @@ declare global {
 				const cleanedHtml = doc.documentElement.outerHTML;
 
 				const response: ContentResponse = {
-					author: defuddled.author,
-					content: defuddled.content,
-					description: defuddled.description,
+					author: enhancedAuthor,
+					content: enhancedContent,
+					description: enhancedDescription,
 					domain: getDomain(document.URL),
 					extractedContent: extractedContent,
 					favicon: defuddled.favicon,
 					fullHtml: cleanedHtml,
 					highlights: highlighter.getHighlights(),
-					image: defuddled.image,
+					image: enhancedImage,
 					language: defuddled.language || '',
 					parseTime: defuddled.parseTime,
-					published: defuddled.published,
+					published: enhancedPublished,
 					schemaOrgData: defuddled.schemaOrgData,
 					selectedHtml: selectedHtml,
-					site: defuddled.site,
-					title: defuddled.title,
+					site: enhancedSite,
+					title: enhancedTitle,
 					wordCount: defuddled.wordCount,
 					metaTags: defuddled.metaTags || []
 				};

@@ -38,6 +38,38 @@ The main content variable is `{{content}}`, which contains the article content, 
 | `{{url}}`           | Current URL                                                                            |
 | `{{words}}`         | Word count                                                                             |
 
+### Platform-enhanced variables (experimental)
+
+For some platforms, Web Clipper adds extra preset variables when platform-specific extraction succeeds.
+
+Common:
+
+- `{{platform}}` (`wechat` or `xiaohongshu`)
+- `{{platform_warning}}`
+- `{{platform_error}}`
+
+WeChat:
+
+- `{{wechat_account}}`
+- `{{wechat_id}}`
+- `{{wechat_alias}}`
+- `{{wechat_author}}`
+- `{{wechat_published_at}}`
+- `{{wechat_published_ts}}`
+- `{{wechat_cover}}`
+- `{{wechat_type}}`
+- `{{wechat_images}}` (JSON array)
+
+Xiaohongshu:
+
+- `{{xhs_source_url}}`
+- `{{xhs_type}}`
+- `{{xhs_is_video}}`
+- `{{xhs_video_url}}`
+- `{{xhs_tags}}` (JSON array)
+- `{{xhs_images}}` (JSON array)
+- `{{xhs_cover}}`
+
 ## Prompt variables
 
 Prompt variables leverage language models to extract and modify data using natural language. Prompt variables require [[Interpret web pages|Interpreter]] to be enabled and configured.
@@ -117,4 +149,3 @@ Nested properties and array access work as well, both with and without the schem
 - `{{schema:author.name}}` will find the first `author` property and then access its `name` sub-property.
 - `{{schema:author[0].name}}` will access the `name` of the first author in an array of authors.
 - `{{schema:author[*].name}}` will return an array of all author names.
-
