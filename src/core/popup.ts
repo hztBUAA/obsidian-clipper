@@ -62,17 +62,89 @@ const memoizedGenerateFrontmatter = memoizeWithExpiration(
 	{ expirationMs: 5000 }
 );
 
+let pathSuggestions: string[] = [];
+
 function updatePathSuggestionsList(paths: string[]): void {
 	const dataList = document.getElementById('path-suggestions') as HTMLDataListElement | null;
+	const unique = Array.from(new Set(paths.map((path) => path.trim()).filter(Boolean))).slice(0, 300);
+	pathSuggestions = unique;
+
 	if (!dataList) return;
 
-	const unique = Array.from(new Set(paths.map((path) => path.trim()).filter(Boolean)));
 	dataList.textContent = '';
-	for (const path of unique.slice(0, 300)) {
+	for (const path of unique) {
 		const option = document.createElement('option');
 		option.value = path;
 		dataList.appendChild(option);
 	}
+}
+
+function hidePathSuggestionMenu(): void {
+	const menu = document.getElementById('path-suggestion-menu') as HTMLDivElement | null;
+	if (!menu) return;
+	menu.style.display = 'none';
+	menu.textContent = '';
+}
+
+function showPathSuggestionMenu(inputValue = ''): void {
+	const menu = document.getElementById('path-suggestion-menu') as HTMLDivElement | null;
+	const pathField = document.getElementById('path-name-field') as HTMLInputElement | null;
+	if (!menu || !pathField) return;
+	if (pathField.style.display === 'none') {
+		hidePathSuggestionMenu();
+		return;
+	}
+
+	const keyword = inputValue.trim().toLowerCase();
+	const filtered = keyword
+		? pathSuggestions.filter((path) => path.toLowerCase().includes(keyword))
+		: [...pathSuggestions];
+	const visible = filtered.slice(0, 12);
+
+	if (visible.length === 0) {
+		hidePathSuggestionMenu();
+		return;
+	}
+
+	menu.textContent = '';
+	for (const suggestion of visible) {
+		const item = document.createElement('div');
+		item.className = 'path-suggestion-item';
+		item.textContent = suggestion;
+		item.addEventListener('mousedown', (event) => {
+			event.preventDefault();
+			pathField.value = suggestion;
+			hidePathSuggestionMenu();
+		});
+		menu.appendChild(item);
+	}
+
+	menu.style.display = 'block';
+}
+
+function setupPathSuggestionsUI(): void {
+	const pathField = document.getElementById('path-name-field') as HTMLInputElement | null;
+	if (!pathField) return;
+
+	pathField.addEventListener('focus', () => {
+		refreshPathSuggestions().finally(() => {
+			showPathSuggestionMenu(pathField.value);
+		});
+	});
+
+	pathField.addEventListener('input', () => {
+		showPathSuggestionMenu(pathField.value);
+	});
+
+	pathField.addEventListener('keydown', (event) => {
+		if (event.key === 'Escape') {
+			hidePathSuggestionMenu();
+		}
+	});
+
+	pathField.addEventListener('blur', () => {
+		setTimeout(() => hidePathSuggestionMenu(), 120);
+	});
 }
 
 function getTemplatePathSuggestions(): string[] {
@@ -107,7 +179,12 @@ async function refreshPathSuggestions(vault?: string): Promise<void> {
 		}
 	}
 
-	updatePathSuggestionsList(Array.from(suggestions));
+	updatePathSuggestionsList(Array.from(suggestions).sort((a, b) => a.localeCompare(b)));
+
+	const pathField = document.getElementById('path-name-field') as HTMLInputElement | null;
+	if (pathField && document.activeElement === pathField) {
+		showPathSuggestionMenu(pathField.value);
+	}
 }
 
 async function maybeLocalizeMedia(
@@ -449,6 +526,8 @@ document.addEventListener('DOMContentLoaded', async function() {
 });
 
 function setupEventListeners(tabId: number) {
+	setupPathSuggestionsUI();
+
 	const templateDropdown = document.getElementById('template-select') as HTMLSelectElement;
 	if (templateDropdown) {
 		templateDropdown.addEventListener('change', function(this: HTMLSelectElement) {

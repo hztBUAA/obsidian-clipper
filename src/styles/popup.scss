@@ -158,6 +158,7 @@
 		display: flex;
 		flex-direction: row;
 		gap: 0.625rem;
+		position: relative;
 		#vault-container {
 			flex-grow: 1;
 		}
@@ -165,6 +166,37 @@
 			font-weight: var(--clipper-select-font-weight);
 			min-width: 100px;
 			cursor: default;
+		}
+
+		.path-suggestion-menu {
+			position: absolute;
+			left: 0;
+			right: 0;
+			top: calc(100% + 4px);
+			z-index: 20;
+			background: var(--background-primary);
+			border: 1px solid var(--background-modifier-border);
+			border-radius: var(--radius-s);
+			max-height: 180px;
+			overflow-y: auto;
+			padding: 4px;
+			box-shadow: var(--shadow-s);
+		}
+
+		.path-suggestion-item {
+			padding: 6px 8px;
+			border-radius: var(--radius-s);
+			font-size: var(--font-ui-small);
+			cursor: pointer;
+			word-break: break-all;
+			@media (hover: hover) {
+				&:hover {
+					background: var(--background-modifier-hover);
+				}
+			}
+			&.is-active {
+				background: var(--background-modifier-hover);
+			}
 		}
 	}
 }

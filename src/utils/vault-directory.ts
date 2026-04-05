@@ -9,6 +9,8 @@ interface PermissionAwareDirectoryHandle extends FileSystemDirectoryHandle {
 	requestPermission?: (descriptor: { mode: 'read' | 'readwrite' }) => Promise<PermissionStateResult>;
 	queryPermission?: (descriptor: { mode: 'read' | 'readwrite' }) => Promise<PermissionStateResult>;
 	entries?: () => AsyncIterableIterator<[string, FileSystemHandle]>;
+	values?: () => AsyncIterableIterator<FileSystemHandle>;
+	[Symbol.asyncIterator]?: () => AsyncIterableIterator<FileSystemHandle>;
 }
 
 const DB_NAME = 'obsidian-clipper-fs';
@@ -117,9 +119,12 @@ export async function getVaultDirectoryHandle(
 
 	try {
 		const permissionHandle = record.handle as PermissionAwareDirectoryHandle;
-		const permission = permissionHandle.queryPermission
+		let permission = permissionHandle.queryPermission
 			? await permissionHandle.queryPermission({ mode })
 			: 'granted';
+		if (permission !== 'granted' && permissionHandle.requestPermission) {
+			permission = await permissionHandle.requestPermission({ mode });
+		}
 		if (permission === 'granted') {
 			return record.handle;
 		}
@@ -203,17 +208,37 @@ export async function collectVaultFolderPaths(vault: string, maxDepth = 4, maxCo
 
 	const folders: string[] = [];
 
+	const iterateChildren = async function* (
+		handle: PermissionAwareDirectoryHandle
+	): AsyncGenerator<[string, FileSystemHandle]> {
+		if (handle.entries) {
+			for await (const tuple of handle.entries()) {
+				yield tuple;
+			}
+			return;
+		}
+
+		if (handle.values) {
+			for await (const entry of handle.values()) {
+				yield [entry.name, entry];
+			}
+			return;
+		}
+
+		if (handle[Symbol.asyncIterator]) {
+			for await (const entry of handle as unknown as AsyncIterable<FileSystemHandle>) {
+				yield [entry.name, entry];
+			}
+		}
+	};
+
 	const walk = async (handle: FileSystemDirectoryHandle, parentPath: string, depth: number): Promise<void> => {
 		if (depth > maxDepth || folders.length >= maxCount) {
 			return;
 		}
 
 		const iterableHandle = handle as PermissionAwareDirectoryHandle;
-		if (!iterableHandle.entries) {
-			return;
-		}
-
-		for await (const [name, entry] of iterableHandle.entries()) {
+		for await (const [name, entry] of iterateChildren(iterableHandle)) {
 			if (entry.kind !== 'directory') {
 				continue;
 			}
