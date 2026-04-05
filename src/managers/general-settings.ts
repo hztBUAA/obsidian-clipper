@@ -18,6 +18,12 @@ import { getClipHistory } from '../utils/storage-utils';
 import dayjs from 'dayjs';
 import weekOfYear from 'dayjs/plugin/weekOfYear';
 import { showModal, hideModal } from '../utils/modal-utils';
+import {
+	getVaultDirectoryStatus,
+	isVaultDirectoryLinkingSupported,
+	linkVaultDirectory,
+	unlinkVaultDirectory
+} from '../utils/vault-directory';
 
 dayjs.extend(weekOfYear);
 
@@ -28,7 +34,32 @@ const STORE_URLS = {
 	edge: 'https://microsoftedge.microsoft.com/addons/detail/obsidian-web-clipper/eigdjhmgnaaeaonimdklocfekkaanfme'
 };
 
-export function updateVaultList(): void {
+async function refreshVaultFolderStatus(
+	vault: string,
+	statusEl: HTMLElement,
+	linkBtn: HTMLButtonElement,
+	unlinkBtn: HTMLButtonElement
+): Promise<void> {
+	if (!isVaultDirectoryLinkingSupported()) {
+		statusEl.textContent = getMessage('vaultFolderLinkUnsupported');
+		linkBtn.disabled = true;
+		unlinkBtn.disabled = true;
+		return;
+	}
+
+	const status = await getVaultDirectoryStatus(vault);
+	if (status.linked) {
+		statusEl.textContent = getMessage('vaultFolderLinked', status.name || '');
+		linkBtn.disabled = false;
+		unlinkBtn.disabled = false;
+	} else {
+		statusEl.textContent = getMessage('vaultFolderNotLinked');
+		linkBtn.disabled = false;
+		unlinkBtn.disabled = true;
+	}
+}
+
+export async function updateVaultList(): Promise<void> {
 	const vaultList = document.getElementById('vault-list') as HTMLUListElement;
 	if (!vaultList) return;
 
@@ -47,6 +78,20 @@ export function updateVaultList(): void {
 		span.textContent = vault;
 		li.appendChild(span);
 
+		const folderStatus = createElementWithClass('span', 'vault-folder-status');
+		folderStatus.textContent = getMessage('vaultFolderNotLinked');
+		li.appendChild(folderStatus);
+
+		const linkBtn = createElementWithClass('button', 'setting-item-list-link') as HTMLButtonElement;
+		linkBtn.setAttribute('type', 'button');
+		linkBtn.textContent = getMessage('linkVaultFolder');
+		li.appendChild(linkBtn);
+
+		const unlinkBtn = createElementWithClass('button', 'setting-item-list-link') as HTMLButtonElement;
+		unlinkBtn.setAttribute('type', 'button');
+		unlinkBtn.textContent = getMessage('unlinkVaultFolder');
+		li.appendChild(unlinkBtn);
+
 		const removeBtn = createElementWithClass('button', 'setting-item-list-remove clickable-icon');
 		removeBtn.setAttribute('type', 'button');
 		removeBtn.setAttribute('aria-label', getMessage('removeVault'));
@@ -61,7 +106,24 @@ export function updateVaultList(): void {
 			e.stopPropagation();
 			removeVault(index);
 		});
+		linkBtn.addEventListener('click', async (e) => {
+			e.stopPropagation();
+			const linked = await linkVaultDirectory(vault);
+			if (!linked) {
+				console.warn(`Failed to link vault folder for ${vault}`);
+			}
+			await refreshVaultFolderStatus(vault, folderStatus, linkBtn, unlinkBtn);
+		});
+		unlinkBtn.addEventListener('click', async (e) => {
+			e.stopPropagation();
+			await unlinkVaultDirectory(vault);
+			await refreshVaultFolderStatus(vault, folderStatus, linkBtn, unlinkBtn);
+		});
 		vaultList.appendChild(li);
+
+		refreshVaultFolderStatus(vault, folderStatus, linkBtn, unlinkBtn).catch((error) => {
+			console.warn('Failed to refresh vault folder status:', error);
+		});
 	});
 
 	initializeIcons(vaultList);
@@ -216,6 +278,8 @@ export function initializeGeneralSettings(): void {
 		initializeBetaFeaturesToggle();
 		initializeLegacyModeToggle();
 		initializeSilentOpenToggle();
+		initializeDownloadImagesLocallyToggle();
+		initializeLocalMediaPathInput();
 		initializeVaultInput();
 		initializeOpenBehaviorDropdown();
 		initializeKeyboardShortcuts();
@@ -253,6 +317,8 @@ function saveSettingsFromForm(): void {
 	const betaFeaturesToggle = document.getElementById('beta-features-toggle') as HTMLInputElement;
 	const legacyModeToggle = document.getElementById('legacy-mode-toggle') as HTMLInputElement;
 	const silentOpenToggle = document.getElementById('silent-open-toggle') as HTMLInputElement;
+	const downloadImagesLocallyToggle = document.getElementById('download-images-locally-toggle') as HTMLInputElement;
+	const localMediaPathInput = document.getElementById('local-media-path-input') as HTMLInputElement;
 	const highlighterToggle = document.getElementById('highlighter-toggle') as HTMLInputElement;
 	const alwaysShowHighlightsToggle = document.getElementById('highlighter-visibility') as HTMLInputElement;
 	const highlightBehaviorSelect = document.getElementById('highlighter-behavior') as HTMLSelectElement;
@@ -264,6 +330,8 @@ function saveSettingsFromForm(): void {
 		betaFeatures: betaFeaturesToggle?.checked ?? generalSettings.betaFeatures,
 		legacyMode: legacyModeToggle?.checked ?? generalSettings.legacyMode,
 		silentOpen: silentOpenToggle?.checked ?? generalSettings.silentOpen,
+		downloadImagesLocally: downloadImagesLocallyToggle?.checked ?? generalSettings.downloadImagesLocally,
+		localMediaPath: localMediaPathInput?.value?.trim() || 'media',
 		highlighterEnabled: highlighterToggle?.checked ?? generalSettings.highlighterEnabled,
 		alwaysShowHighlights: alwaysShowHighlightsToggle?.checked ?? generalSettings.alwaysShowHighlights,
 		highlightBehavior: highlightBehaviorSelect?.value ?? generalSettings.highlightBehavior
@@ -341,6 +409,21 @@ function initializeLegacyModeToggle(): void {
 function initializeSilentOpenToggle(): void {
 	initializeSettingToggle('silent-open-toggle', generalSettings.silentOpen, (checked) => {
 		saveSettings({ ...generalSettings, silentOpen: checked });
+	});
+}
+
+function initializeDownloadImagesLocallyToggle(): void {
+	initializeSettingToggle('download-images-locally-toggle', generalSettings.downloadImagesLocally, (checked) => {
+		saveSettings({ ...generalSettings, downloadImagesLocally: checked });
+	});
+}
+
+function initializeLocalMediaPathInput(): void {
+	const input = document.getElementById('local-media-path-input') as HTMLInputElement;
+	if (!input) return;
+	input.value = generalSettings.localMediaPath || 'media';
+	input.addEventListener('change', () => {
+		saveSettings({ ...generalSettings, localMediaPath: input.value.trim() || 'media' });
 	});
 }
 

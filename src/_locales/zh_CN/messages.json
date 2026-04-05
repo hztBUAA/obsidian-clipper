@@ -885,6 +885,33 @@
 	"silentOpenDescription": {
 		"message": "剪藏的笔记将被保存但不会在新标签页中打开。Obsidian 仍会被置于前台。"
 	},
+	"downloadImagesLocally": {
+		"message": "下载图片到本地"
+	},
+	"downloadImagesLocallyDescription": {
+		"message": "将 Markdown 中的图片下载到已关联的 vault 目录，并自动改写为相对路径引用。"
+	},
+	"localMediaPath": {
+		"message": "本地媒体目录"
+	},
+	"localMediaPathDescription": {
+		"message": "默认是笔记目录下的 media。以 / 开头表示 vault 根目录路径。"
+	},
+	"linkVaultFolder": {
+		"message": "关联目录"
+	},
+	"unlinkVaultFolder": {
+		"message": "取消关联"
+	},
+	"vaultFolderNotLinked": {
+		"message": "未关联目录"
+	},
+	"vaultFolderLinked": {
+		"message": "已关联：$1"
+	},
+	"vaultFolderLinkUnsupported": {
+		"message": "当前浏览器不支持目录关联"
+	},
 	"specificNoteName": {
 		"message": "特定笔记名称"
 	},

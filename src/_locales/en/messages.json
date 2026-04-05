@@ -885,6 +885,33 @@
 	"silentOpenDescription": {
 		"message": "Clipped notes will be saved but will not open as a new tab. Obsidian will still be brought to the foreground."
 	},
+	"downloadImagesLocally": {
+		"message": "Download images locally"
+	},
+	"downloadImagesLocallyDescription": {
+		"message": "Save Markdown image links as local files in your linked vault folder and rewrite links to relative paths."
+	},
+	"localMediaPath": {
+		"message": "Local media folder"
+	},
+	"localMediaPathDescription": {
+		"message": "Default is media under the note folder. Use a leading / for a vault-root folder."
+	},
+	"linkVaultFolder": {
+		"message": "Link folder"
+	},
+	"unlinkVaultFolder": {
+		"message": "Unlink"
+	},
+	"vaultFolderNotLinked": {
+		"message": "Folder not linked"
+	},
+	"vaultFolderLinked": {
+		"message": "Linked: $1"
+	},
+	"vaultFolderLinkUnsupported": {
+		"message": "Folder linking not supported in this browser"
+	},
 	"specificNoteName": {
 		"message": "Specific note name"
 	},

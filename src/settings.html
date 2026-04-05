@@ -157,6 +157,30 @@
 											</select>
 										</div>
 									</div>
+									<div class="setting-item mod-horizontal mod-toggle">
+										<div class="setting-item-info">
+											<label for="download-images-locally-toggle" data-i18n="downloadImagesLocally">Download images locally</label>
+											<div class="setting-item-description" data-i18n="downloadImagesLocallyDescription">
+												When enabled, Web Clipper tries to save Markdown image links as local files inside your linked vault folder and rewrites references to relative paths.
+											</div>
+										</div>
+										<div class="setting-item-control">
+											<div class="checkbox-container">
+												<input type="checkbox" id="download-images-locally-toggle" />
+											</div>
+										</div>
+									</div>
+									<div class="setting-item mod-horizontal">
+										<div class="setting-item-info">
+											<label for="local-media-path-input" data-i18n="localMediaPath">Local media folder</label>
+											<div class="setting-item-description" data-i18n="localMediaPathDescription">
+												Default is <code>media</code> under the note folder. Use a leading <code>/</code> for a vault-root path.
+											</div>
+										</div>
+										<div class="setting-item-control">
+											<input type="text" id="local-media-path-input" placeholder="media" />
+										</div>
+									</div>
 									<div class="setting-item mh mod-horizontal">
 										<div class="setting-item-info">
 											<label for="open-behavior-dropdown" data-i18n="openBehaviorTitle">Default open behavior</label>

@@ -11,6 +11,8 @@ export const generalSettings: Settings = {
 	betaFeatures: false,
 	legacyMode: false,
 	silentOpen: false,
+	downloadImagesLocally: false,
+	localMediaPath: 'media',
 	openBehavior: 'popup',
 	highlighterEnabled: false,
 	alwaysShowHighlights: false,

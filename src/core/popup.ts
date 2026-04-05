@@ -23,6 +23,8 @@ import { sanitizeFileName } from '../utils/string-utils';
 import { saveFile } from '../utils/file-utils';
 import { translatePage, getMessage, setupLanguageAndDirection } from '../utils/i18n';
 import { formatPropertyValue } from '../utils/shared';
+import { localizeMarkdownImagesToVault, normalizeVaultPath } from '../utils/local-media';
+import { collectVaultFolderPaths } from '../utils/vault-directory';
 
 interface ReaderModeResponse {
 	success: boolean;
@@ -59,6 +61,81 @@ const memoizedGenerateFrontmatter = memoizeWithExpiration(
 	},
 	{ expirationMs: 5000 }
 );
+
+function updatePathSuggestionsList(paths: string[]): void {
+	const dataList = document.getElementById('path-suggestions') as HTMLDataListElement | null;
+	if (!dataList) return;
+
+	const unique = Array.from(new Set(paths.map((path) => path.trim()).filter(Boolean)));
+	dataList.textContent = '';
+	for (const path of unique.slice(0, 300)) {
+		const option = document.createElement('option');
+		option.value = path;
+		dataList.appendChild(option);
+	}
+}
+
+function getTemplatePathSuggestions(): string[] {
+	return templates
+		.map((template) => template.path || '')
+		.filter((path) => path && !path.includes('{{') && !path.includes('{%'));
+}
+
+async function refreshPathSuggestions(vault?: string): Promise<void> {
+	const suggestions = new Set<string>();
+
+	getTemplatePathSuggestions().forEach((path) => suggestions.add(path));
+
+	try {
+		const history = await getClipHistory();
+		for (const item of history) {
+			if (item.path) {
+				suggestions.add(item.path);
+			}
+		}
+	} catch (error) {
+		console.warn('Failed to load clip history for path suggestions:', error);
+	}
+
+	const selectedVault = vault || (document.getElementById('vault-select') as HTMLSelectElement | null)?.value || '';
+	if (selectedVault) {
+		try {
+			const folderPaths = await collectVaultFolderPaths(selectedVault, 4, 300);
+			folderPaths.forEach((folderPath) => suggestions.add(folderPath));
+		} catch (error) {
+			console.warn('Failed to collect vault folder suggestions:', error);
+		}
+	}
+
+	updatePathSuggestionsList(Array.from(suggestions));
+}
+
+async function maybeLocalizeMedia(
+	fileContent: string,
+	selectedVault: string,
+	noteName: string,
+	path: string,
+	isDailyNote: boolean
+): Promise<string> {
+	if (!generalSettings.downloadImagesLocally) {
+		return fileContent;
+	}
+
+	const localizationResult = await localizeMarkdownImagesToVault(fileContent, {
+		enabled: generalSettings.downloadImagesLocally,
+		vault: selectedVault,
+		notePath: isDailyNote ? '' : normalizeVaultPath(path),
+		noteName: noteName || 'daily-note',
+		mediaPath: generalSettings.localMediaPath || 'media',
+		isDailyNote,
+	});
+
+	if (localizationResult.warning) {
+		console.warn(localizationResult.warning);
+	}
+
+	return localizationResult.content;
+}
 
 function getPropertiesFromDOM(): Property[] {
 	return Array.from(document.querySelectorAll('.metadata-property input')).map(input => {
@@ -190,6 +267,7 @@ async function initializeExtension(tabId: number) {
 		debugLog('Vaults', 'Last selected vault:', lastSelectedVault);
 
 		updateVaultDropdown(loadedSettings.vaults);
+		await refreshPathSuggestions(lastSelectedVault || undefined);
 
 		const tab = await getTabInfo(tabId);
 		if (!tab.url || isBlankPage(tab.url)) {
@@ -341,6 +419,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 				// DOM-dependent initializations
 				updateVaultDropdown(loadedSettings.vaults);
 				populateTemplateDropdown();
+				await refreshPathSuggestions(lastSelectedVault || undefined);
 				setupEventListeners(currentTabId);
 				await initializeUI();
 
@@ -886,6 +965,7 @@ async function fillTemplateFieldValues(currentTabId: number, template: Template 
 	const pathField = document.getElementById('path-name-field') as HTMLInputElement;
 	if (pathField) {
 		pathField.value = formattedPath;
+		await refreshPathSuggestions();
 	}
 
 	const noteContentField = document.getElementById('note-content-field') as HTMLTextAreaElement;
@@ -1033,6 +1113,9 @@ function updateVaultDropdown(vaults: string[]) {
 	vaultDropdown.addEventListener('change', () => {
 		lastSelectedVault = vaultDropdown.value;
 		setLocalStorage('lastSelectedVault', lastSelectedVault);
+		refreshPathSuggestions(lastSelectedVault || undefined).catch((error) => {
+			console.warn('Failed to refresh path suggestions after vault change:', error);
+		});
 	});
 }
 
@@ -1042,6 +1125,9 @@ function refreshPopup() {
 
 function handleTemplateChange(templateId: string) {
 	currentTemplate = templates.find(t => t.id === templateId) || templates[0];
+	refreshPathSuggestions().catch((error) => {
+		console.warn('Failed to refresh path suggestions after template change:', error);
+	});
 	refreshFields(currentTabId!, false);
 }
 
@@ -1179,7 +1265,9 @@ async function handleSaveToDownloads() {
 
 		const noteContentField = document.getElementById('note-content-field') as HTMLTextAreaElement;
 		const frontmatter = await generateFrontmatter(properties);
-		const fileContent = frontmatter + noteContentField.value;
+		let fileContent = frontmatter + noteContentField.value;
+		const isDailyNote = currentTemplate?.behavior === 'append-daily' || currentTemplate?.behavior === 'prepend-daily';
+		fileContent = await maybeLocalizeMedia(fileContent, vault, fileName, path, Boolean(isDailyNote));
 
 		await saveFile({
 			content: fileContent,
@@ -1264,14 +1352,15 @@ async function handleClipObsidian(): Promise<void> {
 		// Gather content
 		const properties = getPropertiesFromDOM();
 
-		const frontmatter = await generateFrontmatter(properties);
-		const fileContent = frontmatter + noteContentField.value;
-
 		// Save to Obsidian
 		const selectedVault = currentTemplate.vault || vaultDropdown.value;
 		const isDailyNote = currentTemplate.behavior === 'append-daily' || currentTemplate.behavior === 'prepend-daily';
 		const noteName = isDailyNote ? '' : noteNameField?.value || '';
 		const path = isDailyNote ? '' : pathField?.value || '';
+
+		const frontmatter = await generateFrontmatter(properties);
+		let fileContent = frontmatter + noteContentField.value;
+		fileContent = await maybeLocalizeMedia(fileContent, selectedVault, noteName, path, isDailyNote);
 
 		await saveToObsidian(fileContent, noteName, path, selectedVault, currentTemplate.behavior);
 		const tabInfo = await getCurrentTabInfo();

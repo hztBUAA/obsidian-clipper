@@ -365,6 +365,17 @@
 	.setting-item-list-remove {
 		margin-inline-start: auto;
 	}
+
+	.setting-item-list-link {
+		padding: 2px 8px;
+		font-size: var(--font-ui-smallest);
+	}
+
+	.vault-folder-status {
+		color: var(--text-faint);
+		font-size: var(--font-ui-smallest);
+		white-space: nowrap;
+	}
 }
 
 .setting-item-list {
