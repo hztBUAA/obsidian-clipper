@@ -50,6 +50,23 @@ export interface Rating {
 	date: string;
 }
 
+export type OcrProviderMode = 'cloud' | 'local';
+export type OcrApplyScope = 'all-images' | 'only-local-images';
+export type OcrOutputFormat = 'markdown-link' | 'wikilink';
+
+export interface OcrSettings {
+	enabled: boolean;
+	provider: OcrProviderMode;
+	cloudModelId: string;
+	localEndpoint: string;
+	localModel: string;
+	applyScope: OcrApplyScope;
+	outputFormat: OcrOutputFormat;
+	maxImagesPerNote: number;
+	timeoutMs: number;
+	languageHints: string;
+}
+
 export type SaveBehavior = 'addToObsidian' | 'saveFile' | 'copyToClipboard';
 
 export interface ReaderSettings {
@@ -85,6 +102,7 @@ export interface Settings {
 	interpreterAutoRun: boolean;
 	defaultPromptContext: string;
 	propertyTypes: PropertyType[];
+	ocrSettings: OcrSettings;
 	readerSettings: ReaderSettings;
 	stats: {
 		addToObsidian: number;

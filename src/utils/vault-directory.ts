@@ -200,6 +200,33 @@ export async function writeBlobToVaultPath(
 	}
 }
 
+export async function readBlobFromVaultPath(vault: string, filePath: string): Promise<Blob | null> {
+	const rootHandle = await getVaultDirectoryHandle(vault, 'read');
+	if (!rootHandle) {
+		return null;
+	}
+
+	try {
+		const normalized = filePath.replace(/\\/g, '/').replace(/^\/+/, '');
+		const segments = normalized.split('/').filter(Boolean);
+		if (segments.length === 0) {
+			return null;
+		}
+
+		let currentDir = rootHandle;
+		for (const segment of segments.slice(0, -1)) {
+			currentDir = await currentDir.getDirectoryHandle(segment, { create: false });
+		}
+
+		const fileHandle = await currentDir.getFileHandle(segments[segments.length - 1], { create: false });
+		const file = await fileHandle.getFile();
+		return file;
+	} catch (error) {
+		console.warn('Failed to read blob from vault path:', error);
+		return null;
+	}
+}
+
 export async function collectVaultFolderPaths(vault: string, maxDepth = 4, maxCount = 300): Promise<string[]> {
 	const rootHandle = await getVaultDirectoryHandle(vault, 'read');
 	if (!rootHandle) {

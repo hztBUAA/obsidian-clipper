@@ -25,6 +25,7 @@ import { translatePage, getMessage, setupLanguageAndDirection } from '../utils/i
 import { formatPropertyValue } from '../utils/shared';
 import { localizeMarkdownImagesToVault, normalizeVaultPath } from '../utils/local-media';
 import { collectVaultFolderPaths } from '../utils/vault-directory';
+import { appendImageOcrToMarkdown } from '../utils/image-ocr';
 
 interface ReaderModeResponse {
 	success: boolean;
@@ -212,6 +213,68 @@ async function maybeLocalizeMedia(
 	}
 
 	return localizationResult.content;
+}
+
+async function maybeAppendImageOcr(
+	fileContent: string,
+	selectedVault: string,
+	path: string,
+	isDailyNote: boolean
+): Promise<string> {
+	if (!generalSettings.ocrSettings.enabled) {
+		return fileContent;
+	}
+
+	try {
+		const ocrResult = await appendImageOcrToMarkdown(fileContent, {
+			vault: selectedVault,
+			notePath: isDailyNote ? '' : normalizeVaultPath(path),
+			isDailyNote,
+		});
+
+		if (ocrResult.warning) {
+			console.warn(ocrResult.warning);
+		}
+
+		return ocrResult.content;
+	} catch (error) {
+		console.warn('Failed to append image OCR content. Using original note content.', error);
+		return fileContent;
+	}
+}
+
+function isDailyTemplateBehavior(): boolean {
+	return currentTemplate?.behavior === 'append-daily' || currentTemplate?.behavior === 'prepend-daily';
+}
+
+function getCurrentSaveContext(): {
+	selectedVault: string;
+	noteName: string;
+	path: string;
+	isDailyNote: boolean;
+} {
+	const vaultDropdown = document.getElementById('vault-select') as HTMLSelectElement | null;
+	const noteNameField = document.getElementById('note-name-field') as HTMLInputElement | null;
+	const pathField = document.getElementById('path-name-field') as HTMLInputElement | null;
+	const isDailyNote = isDailyTemplateBehavior();
+
+	return {
+		selectedVault: currentTemplate?.vault || vaultDropdown?.value || '',
+		noteName: isDailyNote ? '' : (noteNameField?.value || ''),
+		path: isDailyNote ? '' : (pathField?.value || ''),
+		isDailyNote,
+	};
+}
+
+async function buildProcessedFileContent(properties: Property[]): Promise<string> {
+	const noteContentField = document.getElementById('note-content-field') as HTMLTextAreaElement;
+	const frontmatter = await generateFrontmatter(properties);
+	let fileContent = frontmatter + noteContentField.value;
+
+	const { selectedVault, noteName, path, isDailyNote } = getCurrentSaveContext();
+	fileContent = await maybeLocalizeMedia(fileContent, selectedVault, noteName, path, isDailyNote);
+	fileContent = await maybeAppendImageOcr(fileContent, selectedVault, path, isDailyNote);
+	return fileContent;
 }
 
 function getPropertiesFromDOM(): Property[] {
@@ -585,11 +648,7 @@ function setupEventListeners(tabId: number) {
 	if (copyContentButton) {
 		copyContentButton.addEventListener('click', async () => {
 			const properties = getPropertiesFromDOM();
-
-			const noteContentField = document.getElementById('note-content-field') as HTMLTextAreaElement;
-			const frontmatter = await generateFrontmatter(properties);
-			const fileContent = frontmatter + noteContentField.value;
-			
+			const fileContent = await buildProcessedFileContent(properties);
 			await copyToClipboard(fileContent);
 		});
 	}
@@ -601,22 +660,13 @@ function setupEventListeners(tabId: number) {
 	const shareButtons = document.querySelectorAll('.share-content');
 	if (shareButtons) {
 		shareButtons.forEach(button => {
-			button.addEventListener('click', async (e) => {
-				// Get content synchronously
-				const properties = getPropertiesFromDOM();
+			button.addEventListener('click', async () => {
+				try {
+					const properties = getPropertiesFromDOM();
+					const fileContent = await buildProcessedFileContent(properties);
+					const { selectedVault, noteName, path } = getCurrentSaveContext();
 
-				const noteContentField = document.getElementById('note-content-field') as HTMLTextAreaElement;
-				
-				// Use Promise.all to prepare the data
-				Promise.all([
-					generateFrontmatter(properties),
-					Promise.resolve(noteContentField.value)
-				]).then(([frontmatter, noteContent]) => {
-					const fileContent = frontmatter + noteContent;
-					
-					// Call share directly from the click handler
-					const noteNameField = document.getElementById('note-name-field') as HTMLInputElement;
-					let fileName = noteNameField?.value || 'untitled';
+					let fileName = noteName || 'untitled';
 					fileName = sanitizeFileName(fileName);
 					if (!fileName.toLowerCase().endsWith('.md')) {
 						fileName += '.md';
@@ -625,33 +675,24 @@ function setupEventListeners(tabId: number) {
 					if (navigator.share && navigator.canShare) {
 						const blob = new Blob([fileContent], { type: 'text/markdown;charset=utf-8' });
 						const file = new File([blob], fileName, { type: 'text/markdown;charset=utf-8' });
-						
 						const shareData = {
 							files: [file],
 							text: 'Shared from Obsidian Web Clipper'
 						};
 
 						if (navigator.canShare(shareData)) {
-							const pathField = document.getElementById('path-name-field') as HTMLInputElement;
-							const vaultDropdown = document.getElementById('vault-select') as HTMLSelectElement;
-							const path = pathField?.value || '';
-							const vault = vaultDropdown?.value || '';
-
-							navigator.share(shareData)
-								.then(async () => {
-									const tabInfo = await getCurrentTabInfo();
-									await incrementStat('share', vault, path, tabInfo.url, tabInfo.title);
-									const moreDropdown = document.getElementById('more-dropdown');
-									if (moreDropdown) {
-											moreDropdown.classList.remove('show');
-									}
-								})
-								.catch((error) => {
-									console.error('Error sharing:', error);
-								});
+							await navigator.share(shareData);
+							const tabInfo = await getCurrentTabInfo();
+							await incrementStat('share', selectedVault, path, tabInfo.url, tabInfo.title);
+							const moreDropdown = document.getElementById('more-dropdown');
+							if (moreDropdown) {
+								moreDropdown.classList.remove('show');
+							}
 						}
 					}
-				});
+				} catch (error) {
+					console.error('Error sharing:', error);
+				}
 			});
 		});
 	}
@@ -1341,12 +1382,7 @@ async function handleSaveToDownloads() {
 		const vault = vaultDropdown?.value || '';
 		
 		const properties = getPropertiesFromDOM();
-
-		const noteContentField = document.getElementById('note-content-field') as HTMLTextAreaElement;
-		const frontmatter = await generateFrontmatter(properties);
-		let fileContent = frontmatter + noteContentField.value;
-		const isDailyNote = currentTemplate?.behavior === 'append-daily' || currentTemplate?.behavior === 'prepend-daily';
-		fileContent = await maybeLocalizeMedia(fileContent, vault, fileName, path, Boolean(isDailyNote));
+		const fileContent = await buildProcessedFileContent(properties);
 
 		await saveFile({
 			content: fileContent,
@@ -1432,14 +1468,8 @@ async function handleClipObsidian(): Promise<void> {
 		const properties = getPropertiesFromDOM();
 
 		// Save to Obsidian
-		const selectedVault = currentTemplate.vault || vaultDropdown.value;
-		const isDailyNote = currentTemplate.behavior === 'append-daily' || currentTemplate.behavior === 'prepend-daily';
-		const noteName = isDailyNote ? '' : noteNameField?.value || '';
-		const path = isDailyNote ? '' : pathField?.value || '';
-
-		const frontmatter = await generateFrontmatter(properties);
-		let fileContent = frontmatter + noteContentField.value;
-		fileContent = await maybeLocalizeMedia(fileContent, selectedVault, noteName, path, isDailyNote);
+		const { selectedVault, noteName, path } = getCurrentSaveContext();
+		const fileContent = await buildProcessedFileContent(properties);
 
 		await saveToObsidian(fileContent, noteName, path, selectedVault, currentTemplate.behavior);
 		const tabInfo = await getCurrentTabInfo();
@@ -1498,10 +1528,7 @@ function getActionIcon(actionType: string): string {
 
 async function copyContent() {
 	const properties = getPropertiesFromDOM();
-
-	const noteContentField = document.getElementById('note-content-field') as HTMLTextAreaElement;
-	const frontmatter = await generateFrontmatter(properties);
-	const fileContent = frontmatter + noteContentField.value;
+	const fileContent = await buildProcessedFileContent(properties);
 	await copyToClipboard(fileContent);
 }
 

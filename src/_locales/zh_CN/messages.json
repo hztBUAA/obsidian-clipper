@@ -891,6 +891,78 @@
 	"downloadImagesLocallyDescription": {
 		"message": "将 Markdown 中的图片下载到已关联的 vault 目录，并自动改写为相对路径引用。"
 	},
+	"imageOcrHeading": {
+		"message": "图片 OCR"
+	},
+	"enableImageOcr": {
+		"message": "启用图片 OCR"
+	},
+	"enableImageOcrDescription": {
+		"message": "从图片中提取文字，并追加到剪藏笔记中。"
+	},
+	"ocrProvider": {
+		"message": "OCR 提供方式"
+	},
+	"ocrProviderDescription": {
+		"message": "可使用已配置的云端模型，或本地 OCR 接口。"
+	},
+	"ocrProviderCloud": {
+		"message": "云端"
+	},
+	"ocrProviderLocal": {
+		"message": "本地"
+	},
+	"ocrCloudModel": {
+		"message": "云端 OCR 模型"
+	},
+	"ocrCloudModelDescription": {
+		"message": "选择一个已启用的 Interpreter 模型。"
+	},
+	"ocrLocalEndpoint": {
+		"message": "本地接口地址"
+	},
+	"ocrLocalEndpointDescription": {
+		"message": "Ollama 示例：http://127.0.0.1:11434/api/generate"
+	},
+	"ocrLocalModel": {
+		"message": "本地模型"
+	},
+	"ocrLocalModelDescription": {
+		"message": "例如：llama3.2-vision"
+	},
+	"ocrApplyScope": {
+		"message": "OCR 适用范围"
+	},
+	"ocrApplyScopeDescription": {
+		"message": "设置 OCR 对所有图片生效，或仅对本地图片生效。"
+	},
+	"ocrScopeAll": {
+		"message": "所有图片"
+	},
+	"ocrScopeLocal": {
+		"message": "仅本地图片"
+	},
+	"ocrOutputFormat": {
+		"message": "OCR 输出格式"
+	},
+	"ocrOutputMarkdown": {
+		"message": "图转文字 [image-link](...): ..."
+	},
+	"ocrOutputWikilink": {
+		"message": "图转文字 [[...]]: ..."
+	},
+	"ocrMaxImages": {
+		"message": "每篇最多识别图片数"
+	},
+	"ocrTimeout": {
+		"message": "OCR 超时（毫秒）"
+	},
+	"ocrLanguageHints": {
+		"message": "OCR 语言提示"
+	},
+	"selectModel": {
+		"message": "选择模型"
+	},
 	"localMediaPath": {
 		"message": "本地媒体目录"
 	},

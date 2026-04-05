@@ -25,6 +25,18 @@ export const generalSettings: Settings = {
 	interpreterAutoRun: false,
 	defaultPromptContext: '',
 	propertyTypes: [],
+	ocrSettings: {
+		enabled: false,
+		provider: 'cloud',
+		cloudModelId: '',
+		localEndpoint: 'http://127.0.0.1:11434/api/generate',
+		localModel: '',
+		applyScope: 'all-images',
+		outputFormat: 'markdown-link',
+		maxImagesPerNote: 6,
+		timeoutMs: 15000,
+		languageHints: '',
+	},
 	readerSettings: {
 		fontSize: 16,
 		lineHeight: 1.5,

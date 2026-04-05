@@ -24,6 +24,18 @@ export let generalSettings: Settings = {
 	interpreterAutoRun: false,
 	defaultPromptContext: '',
 	propertyTypes: [],
+	ocrSettings: {
+		enabled: false,
+		provider: 'cloud',
+		cloudModelId: '',
+		localEndpoint: 'http://127.0.0.1:11434/api/generate',
+		localModel: '',
+		applyScope: 'all-images',
+		outputFormat: 'markdown-link',
+		maxImagesPerNote: 6,
+		timeoutMs: 15000,
+		languageHints: ''
+	},
 	readerSettings: {
 		fontSize: 16,
 		lineHeight: 1.6,
@@ -95,6 +107,18 @@ interface StorageData {
 		defaultPromptContext?: string;
 	};
 	property_types?: PropertyType[];
+	ocr_settings?: {
+		enabled?: boolean;
+		provider?: 'cloud' | 'local';
+		cloudModelId?: string;
+		localEndpoint?: string;
+		localModel?: string;
+		applyScope?: 'all-images' | 'only-local-images';
+		outputFormat?: 'markdown-link' | 'wikilink';
+		maxImagesPerNote?: number;
+		timeoutMs?: number;
+		languageHints?: string;
+	};
 	stats?: {
 		addToObsidian: number;
 		saveFile: number;
@@ -131,6 +155,18 @@ export async function loadSettings(): Promise<Settings> {
 		interpreterAutoRun: false,
 		defaultPromptContext: '',
 		propertyTypes: [],
+		ocrSettings: {
+			enabled: false,
+			provider: 'cloud',
+			cloudModelId: '',
+			localEndpoint: 'http://127.0.0.1:11434/api/generate',
+			localModel: '',
+			applyScope: 'all-images',
+			outputFormat: 'markdown-link',
+			maxImagesPerNote: 6,
+			timeoutMs: 15000,
+			languageHints: ''
+		},
 		saveBehavior: 'addToObsidian',
 		readerSettings: {
 			fontSize: 16,
@@ -192,6 +228,18 @@ export async function loadSettings(): Promise<Settings> {
 		interpreterAutoRun: data.interpreter_settings?.interpreterAutoRun ?? defaultSettings.interpreterAutoRun,
 		defaultPromptContext: data.interpreter_settings?.defaultPromptContext || defaultSettings.defaultPromptContext,
 		propertyTypes: data.property_types || defaultSettings.propertyTypes,
+		ocrSettings: {
+			enabled: data.ocr_settings?.enabled ?? defaultSettings.ocrSettings.enabled,
+			provider: data.ocr_settings?.provider ?? defaultSettings.ocrSettings.provider,
+			cloudModelId: data.ocr_settings?.cloudModelId ?? defaultSettings.ocrSettings.cloudModelId,
+			localEndpoint: data.ocr_settings?.localEndpoint ?? defaultSettings.ocrSettings.localEndpoint,
+			localModel: data.ocr_settings?.localModel ?? defaultSettings.ocrSettings.localModel,
+			applyScope: data.ocr_settings?.applyScope ?? defaultSettings.ocrSettings.applyScope,
+			outputFormat: data.ocr_settings?.outputFormat ?? defaultSettings.ocrSettings.outputFormat,
+			maxImagesPerNote: data.ocr_settings?.maxImagesPerNote ?? defaultSettings.ocrSettings.maxImagesPerNote,
+			timeoutMs: data.ocr_settings?.timeoutMs ?? defaultSettings.ocrSettings.timeoutMs,
+			languageHints: data.ocr_settings?.languageHints ?? defaultSettings.ocrSettings.languageHints,
+		},
 		readerSettings: {
 			fontSize: data.reader_settings?.fontSize ?? defaultSettings.readerSettings.fontSize,
 			lineHeight: data.reader_settings?.lineHeight ?? defaultSettings.readerSettings.lineHeight,
@@ -247,6 +295,7 @@ export async function saveSettings(settings?: Partial<Settings>): Promise<void> 
 			defaultPromptContext: generalSettings.defaultPromptContext
 		},
 		property_types: generalSettings.propertyTypes,
+		ocr_settings: generalSettings.ocrSettings,
 		reader_settings: {
 			fontSize: generalSettings.readerSettings.fontSize,
 			lineHeight: generalSettings.readerSettings.lineHeight,

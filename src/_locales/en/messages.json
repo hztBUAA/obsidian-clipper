@@ -891,6 +891,78 @@
 	"downloadImagesLocallyDescription": {
 		"message": "Save Markdown image links as local files in your linked vault folder and rewrite links to relative paths."
 	},
+	"imageOcrHeading": {
+		"message": "Image OCR"
+	},
+	"enableImageOcr": {
+		"message": "Enable image OCR"
+	},
+	"enableImageOcrDescription": {
+		"message": "Extract text from images and append it to the clipped note."
+	},
+	"ocrProvider": {
+		"message": "OCR provider"
+	},
+	"ocrProviderDescription": {
+		"message": "Use a cloud model from your configured providers, or a local endpoint."
+	},
+	"ocrProviderCloud": {
+		"message": "Cloud"
+	},
+	"ocrProviderLocal": {
+		"message": "Local"
+	},
+	"ocrCloudModel": {
+		"message": "Cloud OCR model"
+	},
+	"ocrCloudModelDescription": {
+		"message": "Select one of your enabled Interpreter models."
+	},
+	"ocrLocalEndpoint": {
+		"message": "Local endpoint"
+	},
+	"ocrLocalEndpointDescription": {
+		"message": "Ollama example: http://127.0.0.1:11434/api/generate"
+	},
+	"ocrLocalModel": {
+		"message": "Local model"
+	},
+	"ocrLocalModelDescription": {
+		"message": "Example: llama3.2-vision"
+	},
+	"ocrApplyScope": {
+		"message": "OCR apply scope"
+	},
+	"ocrApplyScopeDescription": {
+		"message": "Choose whether OCR should run for all images or only local images."
+	},
+	"ocrScopeAll": {
+		"message": "All images"
+	},
+	"ocrScopeLocal": {
+		"message": "Only local images"
+	},
+	"ocrOutputFormat": {
+		"message": "OCR output format"
+	},
+	"ocrOutputMarkdown": {
+		"message": "图转文字 [image-link](...): ..."
+	},
+	"ocrOutputWikilink": {
+		"message": "图转文字 [[...]]: ..."
+	},
+	"ocrMaxImages": {
+		"message": "Max images per note"
+	},
+	"ocrTimeout": {
+		"message": "OCR timeout (ms)"
+	},
+	"ocrLanguageHints": {
+		"message": "OCR language hints"
+	},
+	"selectModel": {
+		"message": "Select a model"
+	},
 	"localMediaPath": {
 		"message": "Local media folder"
 	},

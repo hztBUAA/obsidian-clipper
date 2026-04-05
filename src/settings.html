@@ -181,6 +181,118 @@
 											<input type="text" id="local-media-path-input" placeholder="media" />
 										</div>
 									</div>
+									<div class="setting-item setting-item-heading"><h3 data-i18n="imageOcrHeading">Image OCR</h3></div>
+									<div class="setting-item mod-horizontal mod-toggle">
+										<div class="setting-item-info">
+											<label for="ocr-enabled-toggle" data-i18n="enableImageOcr">Enable image OCR</label>
+											<div class="setting-item-description" data-i18n="enableImageOcrDescription">
+												Extract text from images and append it to the clipped note.
+											</div>
+										</div>
+										<div class="setting-item-control">
+											<div class="checkbox-container">
+												<input type="checkbox" id="ocr-enabled-toggle" />
+											</div>
+										</div>
+									</div>
+									<div class="setting-item mod-horizontal">
+										<div class="setting-item-info">
+											<label for="ocr-provider-select" data-i18n="ocrProvider">OCR provider</label>
+											<div class="setting-item-description" data-i18n="ocrProviderDescription">
+												Use a cloud model from your configured providers, or a local endpoint.
+											</div>
+										</div>
+										<div class="setting-item-control">
+											<select id="ocr-provider-select">
+												<option value="cloud" data-i18n="ocrProviderCloud">Cloud</option>
+												<option value="local" data-i18n="ocrProviderLocal">Local</option>
+											</select>
+										</div>
+									</div>
+									<div class="setting-item mod-horizontal" id="ocr-cloud-model-container">
+										<div class="setting-item-info">
+											<label for="ocr-cloud-model-select" data-i18n="ocrCloudModel">Cloud OCR model</label>
+											<div class="setting-item-description" data-i18n="ocrCloudModelDescription">
+												Select one of your enabled Interpreter models.
+											</div>
+										</div>
+										<div class="setting-item-control">
+											<select id="ocr-cloud-model-select"></select>
+										</div>
+									</div>
+									<div id="ocr-local-config-container">
+										<div class="setting-item mod-horizontal">
+											<div class="setting-item-info">
+												<label for="ocr-local-endpoint-input" data-i18n="ocrLocalEndpoint">Local endpoint</label>
+												<div class="setting-item-description" data-i18n="ocrLocalEndpointDescription">
+													Ollama example: <code>http://127.0.0.1:11434/api/generate</code>
+												</div>
+											</div>
+											<div class="setting-item-control">
+												<input type="text" id="ocr-local-endpoint-input" placeholder="http://127.0.0.1:11434/api/generate" />
+											</div>
+										</div>
+										<div class="setting-item mod-horizontal">
+											<div class="setting-item-info">
+												<label for="ocr-local-model-input" data-i18n="ocrLocalModel">Local model</label>
+												<div class="setting-item-description" data-i18n="ocrLocalModelDescription">
+													Example: <code>llama3.2-vision</code>
+												</div>
+											</div>
+											<div class="setting-item-control">
+												<input type="text" id="ocr-local-model-input" placeholder="llama3.2-vision" />
+											</div>
+										</div>
+									</div>
+									<div class="setting-item mod-horizontal">
+										<div class="setting-item-info">
+											<label for="ocr-apply-scope-select" data-i18n="ocrApplyScope">OCR apply scope</label>
+											<div class="setting-item-description" data-i18n="ocrApplyScopeDescription">
+												Choose whether OCR should run for all images or only local images.
+											</div>
+										</div>
+										<div class="setting-item-control">
+											<select id="ocr-apply-scope-select">
+												<option value="all-images" data-i18n="ocrScopeAll">All images</option>
+												<option value="only-local-images" data-i18n="ocrScopeLocal">Only local images</option>
+											</select>
+										</div>
+									</div>
+									<div class="setting-item mod-horizontal">
+										<div class="setting-item-info">
+											<label for="ocr-output-format-select" data-i18n="ocrOutputFormat">OCR output format</label>
+										</div>
+										<div class="setting-item-control">
+											<select id="ocr-output-format-select">
+												<option value="markdown-link" data-i18n="ocrOutputMarkdown">图转文字 [image-link](...): ...</option>
+												<option value="wikilink" data-i18n="ocrOutputWikilink">图转文字 [[...]]: ...</option>
+											</select>
+										</div>
+									</div>
+									<div class="setting-item mod-horizontal">
+										<div class="setting-item-info">
+											<label for="ocr-max-images-input" data-i18n="ocrMaxImages">Max images per note</label>
+										</div>
+										<div class="setting-item-control">
+											<input type="number" id="ocr-max-images-input" min="1" max="20" step="1" />
+										</div>
+									</div>
+									<div class="setting-item mod-horizontal">
+										<div class="setting-item-info">
+											<label for="ocr-timeout-input" data-i18n="ocrTimeout">OCR timeout (ms)</label>
+										</div>
+										<div class="setting-item-control">
+											<input type="number" id="ocr-timeout-input" min="2000" max="120000" step="1000" />
+										</div>
+									</div>
+									<div class="setting-item mod-horizontal">
+										<div class="setting-item-info">
+											<label for="ocr-language-hints-input" data-i18n="ocrLanguageHints">OCR language hints</label>
+										</div>
+										<div class="setting-item-control">
+											<input type="text" id="ocr-language-hints-input" placeholder="zh-CN,en" />
+										</div>
+									</div>
 									<div class="setting-item mh mod-horizontal">
 										<div class="setting-item-info">
 											<label for="open-behavior-dropdown" data-i18n="openBehaviorTitle">Default open behavior</label>

@@ -280,6 +280,7 @@ export function initializeGeneralSettings(): void {
 		initializeSilentOpenToggle();
 		initializeDownloadImagesLocallyToggle();
 		initializeLocalMediaPathInput();
+		initializeOcrSettingsUI();
 		initializeVaultInput();
 		initializeOpenBehaviorDropdown();
 		initializeKeyboardShortcuts();
@@ -319,9 +320,25 @@ function saveSettingsFromForm(): void {
 	const silentOpenToggle = document.getElementById('silent-open-toggle') as HTMLInputElement;
 	const downloadImagesLocallyToggle = document.getElementById('download-images-locally-toggle') as HTMLInputElement;
 	const localMediaPathInput = document.getElementById('local-media-path-input') as HTMLInputElement;
+	const ocrEnabledToggle = document.getElementById('ocr-enabled-toggle') as HTMLInputElement;
+	const ocrProviderSelect = document.getElementById('ocr-provider-select') as HTMLSelectElement;
+	const ocrCloudModelSelect = document.getElementById('ocr-cloud-model-select') as HTMLSelectElement;
+	const ocrLocalEndpointInput = document.getElementById('ocr-local-endpoint-input') as HTMLInputElement;
+	const ocrLocalModelInput = document.getElementById('ocr-local-model-input') as HTMLInputElement;
+	const ocrApplyScopeSelect = document.getElementById('ocr-apply-scope-select') as HTMLSelectElement;
+	const ocrOutputFormatSelect = document.getElementById('ocr-output-format-select') as HTMLSelectElement;
+	const ocrMaxImagesInput = document.getElementById('ocr-max-images-input') as HTMLInputElement;
+	const ocrTimeoutInput = document.getElementById('ocr-timeout-input') as HTMLInputElement;
+	const ocrLanguageHintsInput = document.getElementById('ocr-language-hints-input') as HTMLInputElement;
 	const highlighterToggle = document.getElementById('highlighter-toggle') as HTMLInputElement;
 	const alwaysShowHighlightsToggle = document.getElementById('highlighter-visibility') as HTMLInputElement;
 	const highlightBehaviorSelect = document.getElementById('highlighter-behavior') as HTMLSelectElement;
+
+	const parseNumberInRange = (value: string, fallback: number, min: number, max: number): number => {
+		const parsed = Number.parseInt(value, 10);
+		if (!Number.isFinite(parsed)) return fallback;
+		return Math.min(max, Math.max(min, parsed));
+	};
 
 	const updatedSettings = {
 		...generalSettings, // Keep existing settings
@@ -332,6 +349,19 @@ function saveSettingsFromForm(): void {
 		silentOpen: silentOpenToggle?.checked ?? generalSettings.silentOpen,
 		downloadImagesLocally: downloadImagesLocallyToggle?.checked ?? generalSettings.downloadImagesLocally,
 		localMediaPath: localMediaPathInput?.value?.trim() || 'media',
+		ocrSettings: {
+			...generalSettings.ocrSettings,
+			enabled: ocrEnabledToggle?.checked ?? generalSettings.ocrSettings.enabled,
+			provider: (ocrProviderSelect?.value as 'cloud' | 'local') ?? generalSettings.ocrSettings.provider,
+			cloudModelId: ocrCloudModelSelect?.value ?? generalSettings.ocrSettings.cloudModelId,
+			localEndpoint: ocrLocalEndpointInput?.value?.trim() || generalSettings.ocrSettings.localEndpoint,
+			localModel: ocrLocalModelInput?.value?.trim() || generalSettings.ocrSettings.localModel,
+			applyScope: (ocrApplyScopeSelect?.value as 'all-images' | 'only-local-images') ?? generalSettings.ocrSettings.applyScope,
+			outputFormat: (ocrOutputFormatSelect?.value as 'markdown-link' | 'wikilink') ?? generalSettings.ocrSettings.outputFormat,
+			maxImagesPerNote: parseNumberInRange(ocrMaxImagesInput?.value, generalSettings.ocrSettings.maxImagesPerNote, 1, 20),
+			timeoutMs: parseNumberInRange(ocrTimeoutInput?.value, generalSettings.ocrSettings.timeoutMs, 2000, 120000),
+			languageHints: ocrLanguageHintsInput?.value?.trim() || '',
+		},
 		highlighterEnabled: highlighterToggle?.checked ?? generalSettings.highlighterEnabled,
 		alwaysShowHighlights: alwaysShowHighlightsToggle?.checked ?? generalSettings.alwaysShowHighlights,
 		highlightBehavior: highlightBehaviorSelect?.value ?? generalSettings.highlightBehavior
@@ -425,6 +455,70 @@ function initializeLocalMediaPathInput(): void {
 	input.addEventListener('change', () => {
 		saveSettings({ ...generalSettings, localMediaPath: input.value.trim() || 'media' });
 	});
+}
+
+function updateOcrProviderVisibility(): void {
+	const providerSelect = document.getElementById('ocr-provider-select') as HTMLSelectElement | null;
+	const cloudContainer = document.getElementById('ocr-cloud-model-container');
+	const localContainer = document.getElementById('ocr-local-config-container');
+	if (!providerSelect || !cloudContainer || !localContainer) return;
+
+	const isCloud = providerSelect.value === 'cloud';
+	cloudContainer.style.display = isCloud ? 'flex' : 'none';
+	localContainer.style.display = isCloud ? 'none' : 'block';
+}
+
+function initializeOcrCloudModelSelect(): void {
+	const modelSelect = document.getElementById('ocr-cloud-model-select') as HTMLSelectElement | null;
+	if (!modelSelect) return;
+
+	const enabledModels = generalSettings.models.filter((model) => model.enabled);
+	modelSelect.textContent = '';
+
+	const emptyOption = document.createElement('option');
+	emptyOption.value = '';
+	emptyOption.textContent = getMessage('selectModel');
+	modelSelect.appendChild(emptyOption);
+
+	for (const model of enabledModels) {
+		const option = document.createElement('option');
+		option.value = model.id;
+		option.textContent = model.name;
+		modelSelect.appendChild(option);
+	}
+
+	modelSelect.value = generalSettings.ocrSettings.cloudModelId || generalSettings.interpreterModel || '';
+}
+
+function initializeOcrSettingsUI(): void {
+	const enabledToggle = document.getElementById('ocr-enabled-toggle') as HTMLInputElement | null;
+	const providerSelect = document.getElementById('ocr-provider-select') as HTMLSelectElement | null;
+	const localEndpointInput = document.getElementById('ocr-local-endpoint-input') as HTMLInputElement | null;
+	const localModelInput = document.getElementById('ocr-local-model-input') as HTMLInputElement | null;
+	const applyScopeSelect = document.getElementById('ocr-apply-scope-select') as HTMLSelectElement | null;
+	const outputFormatSelect = document.getElementById('ocr-output-format-select') as HTMLSelectElement | null;
+	const maxImagesInput = document.getElementById('ocr-max-images-input') as HTMLInputElement | null;
+	const timeoutInput = document.getElementById('ocr-timeout-input') as HTMLInputElement | null;
+	const languageHintsInput = document.getElementById('ocr-language-hints-input') as HTMLInputElement | null;
+
+	if (enabledToggle) enabledToggle.checked = generalSettings.ocrSettings.enabled;
+	if (providerSelect) providerSelect.value = generalSettings.ocrSettings.provider;
+	if (localEndpointInput) localEndpointInput.value = generalSettings.ocrSettings.localEndpoint;
+	if (localModelInput) localModelInput.value = generalSettings.ocrSettings.localModel;
+	if (applyScopeSelect) applyScopeSelect.value = generalSettings.ocrSettings.applyScope;
+	if (outputFormatSelect) outputFormatSelect.value = generalSettings.ocrSettings.outputFormat;
+	if (maxImagesInput) maxImagesInput.value = String(generalSettings.ocrSettings.maxImagesPerNote);
+	if (timeoutInput) timeoutInput.value = String(generalSettings.ocrSettings.timeoutMs);
+	if (languageHintsInput) languageHintsInput.value = generalSettings.ocrSettings.languageHints || '';
+
+	initializeOcrCloudModelSelect();
+	updateOcrProviderVisibility();
+
+	if (providerSelect) {
+		providerSelect.addEventListener('change', () => {
+			updateOcrProviderVisibility();
+		});
+	}
 }
 
 function initializeOpenBehaviorDropdown(): void {
